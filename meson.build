@@ -4,7 +4,7 @@
 #*
 #* SPDX-License-Identifier: GPL-3
 #*/
-project('Cryptix-Template', ['c', 'cpp'],
+project('Aurora', ['c', 'cpp'],
   version: 'v0.0.1', license: 'GPL-3.0',
   default_options: [
     'optimization=3',
@@ -60,10 +60,10 @@ deps = [
 ]
 
 executable(
-  'Cryptix-Template', srcs,
+  'Aurora', srcs,
   include_directories: incs, 
   link_args: ['-lsupc++', '-lgcc_s'], 
-  dependencies: deps, install: true
+  dependencies: deps, install: false,
 )
 
 subdir('Tests')
