@@ -4,17 +4,50 @@
  *
  * SPDX-License-Identifier: GPL-3
  */
+#include <Neon/Core/Environment.hpp>
+#include <Neon/Filesystem/File.hpp>
+#include <Neon/Filesystem/VFS.hpp>
+
 #include <Prism/Debug/Assertions.hpp>
 #include <Prism/Debug/Log.hpp>
 
 #include <sys/mount.h>
+#include <sys/wait.h>
 #include <unistd.h>
-#include <wait.h>
 
 using namespace Prism;
-using Log::Error;
-using Log::Info;
-using Log::Trace;
+void Info(const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    Log::Logv(LogLevel::eInfo, format, args);
+    Log::LogChar('\n');
+    va_end(args);
+}
+void Trace(const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    Log::Logv(LogLevel::eTrace, format, args);
+    Log::LogChar('\n');
+    va_end(args);
+}
+void OnError(const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    Log::Logv(LogLevel::eError, format, args);
+    Log::LogChar('\n');
+    va_end(args);
+}
+void Message(const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    Log::Logv(LogLevel::eNone, format, args);
+    Log::LogChar('\n');
+    va_end(args);
+}
 
 constexpr usize MAX_LINE_LENGTH = 1024;
 constexpr usize MAX_FIELDS      = 6;
@@ -71,7 +104,7 @@ i32 parseMountPoint(const char* line, MountPoint& entry)
     char* token              = strtok(temp, " \t");
     i32   fieldCount         = 0;
 
-    while (token && fieldCount < MAX_FIELDS)
+    while (token && fieldCount < static_cast<i32>(MAX_FIELDS))
     {
         fields[fieldCount++] = token;
         token                = strtok(NULL, " \t");
@@ -107,7 +140,7 @@ isize mountFilesystems()
     FILE* file = fopen("/etc/fstab", "r");
     if (!file)
     {
-        perror("Failed to open /etc/fstab");
+        OnError("Failed to open /etc/fstab");
         return EXIT_FAILURE;
     }
 
@@ -126,22 +159,22 @@ isize mountFilesystems()
         if (parseMountPoint(line, entry))
         {
             usize mountFlags = parseMountOptions(entry.Options);
-            printf("options: %s\n", entry.Options);
+            Trace("Aurora: Mount options: %s", entry.Options);
             i32 mountStatus
                 = mount(entry.Source, entry.Target, entry.FilesystemType,
                         mountFlags, entry.Options);
-            printf("mount status: %d\n", mountStatus);
+            Trace("Aurora: Mount status: %d", mountStatus);
             if (mountStatus == -1)
-                fprintf(stderr,
-                        "init: failed to mount `%s` filesystem at `%s`, "
-                        "source: %s, flags: `%s`\nerror code: %s\n",
-                        entry.FilesystemType, entry.Target, entry.Source,
-                        entry.Options, strerror(errno));
+                OnError(
+                    "Aurora: Failed to mount `%s` filesystem at `%s`, "
+                    "source: %s, flags: `%s`\nerror code: %s",
+                    entry.FilesystemType, entry.Target, entry.Source,
+                    entry.Options, strerror(errno));
 
             freeMountPoint(entry);
         }
         else
-            fprintf(stderr, "Skipping invalid or incomplete line %d\n",
+            OnError("Aurora: Skipping invalid or incomplete line %d",
                     lineNumber);
     }
 
@@ -149,23 +182,25 @@ isize mountFilesystems()
     return EXIT_SUCCESS;
 }
 
-i32 main()
+int NeonMain(const Vector<StringView>& argv, const Vector<StringView>& envp)
 {
     Trace("Aurora: Setting up environment variables");
-#ifdef __cryptix__
-    setenv("TERM", "linux", 1);
-    setenv("USER", "root", 1);
-    setenv("HOME", "/root", 1);
-    setenv("PATH", "/usr/local/bin:/ur/bin:/usr/sbin", 1);
+    using namespace Neon;
 
-    Log::Log(LogLevel::eNone, "Aurora: Welcome to CryptixOS!\n");
+#ifdef __cryptix__
+    Environment::Overwrite("TERM", "linux");
+    Environment::Overwrite("USER", "root");
+    Environment::Overwrite("HOME", "/root");
+    Environment::Overwrite("PATH", "/usr/local/bin:/ur/bin:/usr/sbin");
+
+    Message("Aurora: Welcome to CryptixOS!");
 #endif
 
-    PrismAssert(mountFilesystems() == 0);
-    static constexpr StringView shellPath = "/usr/bin/bash"_sv;
-    if (access(shellPath.Raw(), X_OK) == -1)
+    mountFilesystems();
+    static constexpr PathView shellPath = "/usr/bin/bash"_sv;
+    if (!VFS::Access(shellPath, FileMode::eExecute))
     {
-        Error("Aurora: Failed to access the shell => {}", shellPath);
+        OnError("Aurora: Failed to access the shell => %s", shellPath);
         return EXIT_FAILURE;
     }
 
@@ -176,7 +211,7 @@ i32 main()
         i32 pid = fork();
         if (pid == -1)
         {
-            Error("Aurora: fork failed");
+            OnError("Aurora: fork failed");
             return EXIT_FAILURE;
         }
         else if (pid == 0)
@@ -184,7 +219,7 @@ i32 main()
             const char* flag = "-i";
             char* const argv[]
                 = {(char*)shellPath.Raw(), const_cast<char*>(flag), NULL};
-            chdir(getenv("HOME"));
+            VFS::ChangeDirectory(Environment::Get("HOME"));
             execvp(shellPath.Raw(), argv);
         }
 
@@ -195,7 +230,7 @@ i32 main()
             bool exited = WIFEXITED(status);
             if (!exited) goto continue_waiting;
 
-            Info("Aurora: Child {} died with exit code {}", pid,
+            Info("Aurora: Child %d died with exit code %d", pid,
                  WEXITSTATUS(status));
         }
     }

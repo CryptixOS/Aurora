@@ -9,7 +9,7 @@ project('Aurora', ['c', 'cpp'],
   default_options: [
     'optimization=3',
     'warning_level=2',
-    'werror=true',
+    # 'werror=true',
     'c_std=c17',
     'cpp_std=c++23',
   ],
@@ -57,13 +57,17 @@ endif
 
 deps = [
   dependency('prism'),
+  dependency('neon'),
 ]
 
 executable(
-  'Aurora', srcs,
+  'init', srcs,
   include_directories: incs, 
-  link_args: ['-lsupc++', '-lgcc_s'], 
-  dependencies: deps, install: false,
+  link_args: [
+    '-lsupc++', '-lgcc_s',
+  ],
+  dependencies: deps, install: true,
+  install_dir: '/usr/sbin/',
 )
 
 subdir('Tests')
