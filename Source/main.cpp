@@ -6,7 +6,7 @@
  */
 #include <Neon/Core/Environment.hpp>
 #include <Neon/Filesystem/File.hpp>
-#include <Neon/Filesystem/VFS.hpp>
+#include <Neon/Filesystem/Filesystem.hpp>
 
 #include <Prism/Debug/Assertions.hpp>
 #include <Prism/Debug/Log.hpp>
@@ -14,6 +14,7 @@
 #include <sys/mount.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <signal.h>
 
 using namespace Prism;
 void Info(const char* format, ...)
@@ -21,7 +22,6 @@ void Info(const char* format, ...)
     va_list args;
     va_start(args, format);
     Log::Logv(LogLevel::eInfo, format, args);
-    Log::LogChar('\n');
     va_end(args);
 }
 void Trace(const char* format, ...)
@@ -29,7 +29,6 @@ void Trace(const char* format, ...)
     va_list args;
     va_start(args, format);
     Log::Logv(LogLevel::eTrace, format, args);
-    Log::LogChar('\n');
     va_end(args);
 }
 void OnError(const char* format, ...)
@@ -37,7 +36,6 @@ void OnError(const char* format, ...)
     va_list args;
     va_start(args, format);
     Log::Logv(LogLevel::eError, format, args);
-    Log::LogChar('\n');
     va_end(args);
 }
 void Message(const char* format, ...)
@@ -45,7 +43,6 @@ void Message(const char* format, ...)
     va_list args;
     va_start(args, format);
     Log::Logv(LogLevel::eNone, format, args);
-    Log::LogChar('\n');
     va_end(args);
 }
 
@@ -182,6 +179,11 @@ isize mountFilesystems()
     return EXIT_SUCCESS;
 }
 
+static void signalHandler(int signo)
+{
+    Info("Aurora: Received %d signal", signo);
+}
+
 int NeonMain(const Vector<StringView>& argv, const Vector<StringView>& envp)
 {
     Trace("Aurora: Setting up environment variables");
@@ -198,11 +200,18 @@ int NeonMain(const Vector<StringView>& argv, const Vector<StringView>& envp)
 
     mountFilesystems();
     static constexpr PathView shellPath = "/usr/bin/bash"_sv;
-    if (!VFS::Access(shellPath, FileMode::eExecute))
+    if (!Filesystem::Access(shellPath, FileMode::eExecute))
     {
         OnError("Aurora: Failed to access the shell => %s", shellPath);
         return EXIT_FAILURE;
     }
+
+    struct sigaction psa;
+    psa.sa_handler = signalHandler;
+    sigaction(SIGHUP, &psa, nullptr);
+
+    pid_t self = getpid();
+    kill(self, SIGHUP);
 
     for (;;)
     {
@@ -219,7 +228,7 @@ int NeonMain(const Vector<StringView>& argv, const Vector<StringView>& envp)
             const char* flag = "-i";
             char* const argv[]
                 = {(char*)shellPath.Raw(), const_cast<char*>(flag), NULL};
-            VFS::ChangeDirectory(Environment::Get("HOME"));
+            Filesystem::ChangeDirectory(Environment::Get("HOME"));
             execvp(shellPath.Raw(), argv);
         }
 
