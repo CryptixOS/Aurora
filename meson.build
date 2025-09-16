@@ -63,8 +63,12 @@ deps = [
 executable(
   'init', srcs,
   include_directories: incs, 
+  cpp_args: [
+    '-DFMT_EXCEPTIONS=0',
+  ],
   link_args: [
-    '-lsupc++', '-lgcc_s',
+    '-lsupc++', '-lgcc',
+     '-lgcc_s'
   ],
   dependencies: deps, install: true,
   install_dir: '/usr/sbin/',

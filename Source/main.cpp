@@ -38,24 +38,24 @@ DeclareLog(Debug);
 DeclareLog(Warn);
 DeclareLogNamed(Message, None);
 DeclareLogNamed(OnError, Error);
+void* operator new(usize size) { return calloc(1, size); }
+void* operator new(usize size, AlignmentType) { return calloc(1, size); }
+void* operator new[](usize size) { return calloc(1, size); }
+void* operator new[](usize size, AlignmentType) { return calloc(1, size); }
+void  operator delete(void* memory) noexcept { free(memory); }
+void  operator delete(void* memory, AlignmentType) noexcept { free(memory); }
+void  operator delete(void* memory, usize) noexcept { free(memory); }
+void  operator delete[](void* memory) noexcept { free(memory); }
+void  operator delete[](void* memory, AlignmentType) noexcept { free(memory); }
+void  operator delete[](void* memory, usize) noexcept { free(memory); }
 
 ErrorOr<void> initializeStdIo()
 {
-    return {};
+    i32 stdinFd = Syscall(SYS_OPEN, "/dev/console", O_RDONLY, 0);
+    if (stdinFd) Syscall(SYS_DUP2, stdinFd, 0);
 
-    i32 onefd = open("/dev/console", O_RDONLY, 0);
-    if (onefd != -1) dup2(onefd, 0);
-    i32 twofd = open("/dev/console", O_RDWR, 0);
-    if (twofd != -1)
-    {
-        dup2(twofd, 1);
-        dup2(twofd, 2);
-    }
-
-    if (onefd > 2) close(onefd);
-    if (twofd > 2) close(twofd);
-
-    if (errno) return Error(errno);
+    i32 stdoutFd = Syscall(SYS_OPEN, "/dev/console", O_RDWR, 0);
+    IgnoreUnused(stdoutFd);
     return {};
 }
 ErrorOr<isize> mountFilesystems()
@@ -76,11 +76,6 @@ ErrorOr<isize> mountFilesystems()
     return status;
 }
 
-namespace mlibc
-{
-    extern void sys_sigreturn();
-}
-
 static void signalHandler(int signo)
 {
     Info("Aurora: Received %ld signal", i64(signo));
@@ -89,11 +84,12 @@ static void signalHandler(int signo)
 ErrorOr<void> NeonMain(const Vector<StringView>& argv,
                        const Vector<StringView>& envp)
 {
-    Trace("Aurora: Ininitializing...");
+    Assert(initializeStdIo());
+    Trace("Aurora: Initializing...");
+    Debug("Aurora: ProcessID => %i", getpid());
     Debug("Aurora: Arguments => ");
     for (usize i = 0; const auto arg : argv)
         Message("\tArgs[%zu]: %s", i++, arg);
-    Debug("Aurora: Environment variables => ");
     for (usize i = 0; const auto env : envp)
         Message("\tEnvs[%zu]: %s", i++, env);
 
@@ -101,16 +97,15 @@ ErrorOr<void> NeonMain(const Vector<StringView>& argv,
     using namespace Neon;
 
 #ifdef __cryptix__
-    Environment::Overwrite("TERM", "linux");
-    Environment::Overwrite("USER", "root");
-    Environment::Overwrite("HOME", "/root");
-    Environment::Overwrite("PATH", "/usr/local/bin:/ur/bin:/usr/sbin");
+    Environment::Overwrite("TERM"_sv, "linux"_sv);
+    Environment::Overwrite("USER"_sv, "root"_sv);
+    Environment::Overwrite("HOME"_sv, "/root"_sv);
+    Environment::Overwrite("PATH"_sv, "/usr/local/bin:/ur/bin:/usr/sbin"_sv);
 
     Message("\n\n\n\n");
     Info("Aurora: Welcome to CryptixOS!");
 #endif
 
-    Assert(initializeStdIo());
     mountFilesystems();
     static constexpr PathView shellPath = "/usr/bin/bash"_sv;
     if (!Filesystem::Access(shellPath, FileMode::eExecute))
@@ -142,7 +137,7 @@ ErrorOr<void> NeonMain(const Vector<StringView>& argv,
             const char* flag = "-i";
             char* const argv[]
                 = {(char*)shellPath.Raw(), const_cast<char*>(flag), NULL};
-            Filesystem::ChangeDirectory(Environment::Get("HOME"));
+            Filesystem::ChangeDirectory(Environment::Get("HOME"_sv));
             execvp(shellPath.Raw(), argv);
         }
 
