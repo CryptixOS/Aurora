@@ -20,15 +20,15 @@
 #include <unistd.h>
 
 using namespace Prism;
-#define Assert(...) PrismAssert(__VA_ARGS__)
+#define Assert(...) assert(__VA_ARGS__)
 
 #define DeclareLogNamed(name, level)                                           \
     void name(const char* format, ...)                                         \
     {                                                                          \
-        va_list args;                                                          \
-        va_start(args, format);                                                \
+        VaList args;                                                           \
+        PrismVaStart(args, format);                                            \
         Log::Logv(LogLevel::e##level, format, args);                           \
-        va_end(args);                                                          \
+        PrismVaEnd(args);                                                      \
     }
 #define DeclareLog(level) DeclareLogNamed(level, level)
 
@@ -107,7 +107,7 @@ ErrorOr<void> NeonMain(const Vector<StringView>& argv,
 #endif
 
     mountFilesystems();
-    static constexpr PathView shellPath = "/usr/bin/bash"_sv;
+    static constexpr PathView shellPath = "/usr/bin/dash"_sv;
     if (!Filesystem::Access(shellPath, FileMode::eExecute))
     {
         OnError("Aurora: Failed to access the shell => %s", shellPath);
