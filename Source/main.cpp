@@ -64,8 +64,8 @@ ErrorOr<isize> mountFilesystems()
     if (pid == -1) return Error(errno);
     else if (pid == 0)
     {
-        execl("/bin/mount", "mount", "-a", "--mkdir", nullptr);
-        OnError("Aurora: Failed to execute /bin/mount -a --mkdir");
+        execl("/bin/mount", "mount", "-a", nullptr);
+        OnError("Aurora: Failed to execute /bin/mount -a");
         return Error(errno);
     }
 
