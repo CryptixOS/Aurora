@@ -64,8 +64,8 @@ ErrorOr<isize> mountFilesystems()
     if (pid == -1) return Error(errno);
     else if (pid == 0)
     {
-        execl("/bin/mount", "mount", "-a", nullptr);
-        OnError("Aurora: Failed to execute /bin/mount -a");
+        execl("/bin/mount", "mount", "-a", "--mkdir", nullptr);
+        OnError("Aurora: Failed to execute /bin/mount -a --mkdir");
         return Error(errno);
     }
 
@@ -107,7 +107,7 @@ ErrorOr<void> NeonMain(const Vector<StringView>& argv,
 #endif
 
     mountFilesystems();
-    static constexpr PathView shellPath = "/usr/bin/dash"_sv;
+    static constexpr PathView shellPath = "/usr/bin/bash"_sv;
     if (!Filesystem::Access(shellPath, FileMode::eExecute))
     {
         OnError("Aurora: Failed to access the shell => %s", shellPath);
