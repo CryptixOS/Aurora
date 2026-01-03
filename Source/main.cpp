@@ -14,8 +14,11 @@
 
 #include <cryptix/syscall.h>
 #include <fcntl.h>
+#include <linux/reboot.h>
 #include <signal.h>
+#include <string.h>
 #include <sys/mount.h>
+#include <sys/reboot.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -80,6 +83,25 @@ static void signalHandler(int signo)
 {
     Info("Aurora: Received %ld signal", i64(signo));
 }
+static void handleShutdown(i32 signo)
+{
+    Info("Aurora: Received shutdown signal #%ld", i64(signo));
+    // TODO(v1tr10l7): shutdown all services once we have them
+
+    Neon::Filesystem::SyncAll();
+    reboot(LINUX_REBOOT_CMD_POWER_OFF);
+}
+
+ErrorOr<void> setupSignals()
+{
+    struct sigaction psa;
+    psa.sa_handler = signalHandler;
+    sigaction(SIGHUP, &psa, nullptr);
+
+    psa.sa_handler = handleShutdown;
+    sigaction(SIGINT, &psa, nullptr);
+    sigaction(SIGTERM, &psa, nullptr);
+}
 
 ErrorOr<void> NeonMain(const Vector<StringView>& argv,
                        const Vector<StringView>& envp)
@@ -114,10 +136,11 @@ ErrorOr<void> NeonMain(const Vector<StringView>& argv,
         return Error(errno);
     }
 
-    struct sigaction psa;
-    psa.sa_handler = signalHandler;
-    sigaction(SIGHUP, &psa, nullptr);
-
+    if (auto status = setupSignals(); !status)
+    {
+        const char* err = strerror(status.Error());
+        OnError("Aurora: failed to setup signals => %s", err);
+    }
     pid_t self = getpid();
     Trace("Aurora: Sending %d signal to pid #%d", SIGHUP, self);
     kill(self, SIGHUP);
