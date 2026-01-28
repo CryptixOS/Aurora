@@ -36,12 +36,11 @@ cxx_args = [
   '-DFMT_USE_FLOAT128=0',
   '-DFMT_USE_EXCEPTIONS=0',
   '-DPRISM_DISABLE_FMT=1',
+  '-DPRISM_USE_NAMESPACE=1',
+  '-DPRISM_LOG_ENABLE=1',
 ]
 add_global_arguments(cxx_args, language: 'cpp')
 
-srcs = files(
-  'Source/main.cpp',
-)
 incs = include_directories(
   'Source',
 )
@@ -61,18 +60,5 @@ deps = [
   dependency('neon'),
 ]
 
-executable(
-  'init', srcs,
-  include_directories: incs, 
-  cpp_args: [
-    '-DFMT_EXCEPTIONS=0',
-  ],
-  link_args: [
-    '-lsupc++', '-lgcc',
-     '-lgcc_s'
-  ],
-  dependencies: deps, install: true,
-  install_dir: '/usr/sbin/',
-)
-
+subdir('Source')
 subdir('Tests')
