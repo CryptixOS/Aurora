@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: GPL-3
  */
 #include <Neon/Core/Environment.hpp>
+#include <Neon/Core/System.hpp>
 #include <Neon/Filesystem/File.hpp>
 #include <Neon/Filesystem/Filesystem.hpp>
 #include <Neon/Process/Process.hpp>
@@ -15,11 +16,9 @@
 
 #include <cryptix/syscall.h>
 #include <fcntl.h>
-#include <linux/reboot.h>
 #include <signal.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
-#include <sys/reboot.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -61,9 +60,9 @@ namespace
 ErrorOr<void> initializeStdIo()
 {
     Trace("Aurora: Opening stdio streams...");
-    auto stdIn  = TryOrRet(File::Open("/dev/tty1"_sv, FileOpenFlags::eRead));
-    auto stdOut = TryOrRet(File::Open("/dev/tty1"_sv, FileOpenFlags::eWrite));
-    auto stdErr = TryOrRet(File::Open("/dev/tty1"_sv, FileOpenFlags::eWrite));
+    auto stdIn  = TryOrRet(File::Open("/dev/tty"_sv, FileOpenFlags::eRead));
+    auto stdOut = TryOrRet(File::Open("/dev/tty"_sv, FileOpenFlags::eWrite));
+    auto stdErr = TryOrRet(File::Open("/dev/tty"_sv, FileOpenFlags::eWrite));
 
     if (auto result = stdIn->Duplicate(0); result) s_StdIn = *result;
     if (auto result = stdOut->Duplicate(1); result) s_StdOut = *result;
@@ -108,7 +107,7 @@ static void handleShutdown(i32 signo)
     // TODO(v1tr10l7): shutdown all services once we have them
 
     Neon::Filesystem::SyncAll();
-    reboot(LINUX_REBOOT_CMD_POWER_OFF);
+    System::Reboot();
 }
 
 static ErrorOr<void> setupSignals()
@@ -162,8 +161,18 @@ static ErrorOr<isize> setupCommandSocket()
         return Error(errno);
     }
 
-    listen(fd, 5);
-    chmod(SOCKET_PATH.Raw(), 0666);
+    if (listen(fd, 5) == -1)
+    {
+        OnError("Aurora: Failed to listen on socket: '%s', errno; %s",
+                SOCKET_PATH.Raw(), strerror(errno));
+        return Error(errno);
+    }
+    if (chmod(SOCKET_PATH.Raw(), 0666) == -1)
+    {
+        OnError("Aurora: Failed to chmod socket: '%s', errno; %s",
+                SOCKET_PATH.Raw(), strerror(errno));
+        return Error(errno);
+    }
     return fd;
 }
 
@@ -212,7 +221,7 @@ ErrorOr<void> NeonMain(const Vector<StringView>& argv,
     kill(self, SIGHUP);
 
     Info("Aurora: Pivoting root...");
-    mkdir("/mnt/ext2/tmp", 0755);
+    Filesystem::CreateDirectory("/mnt/ext2/tmp", static_cast<FileMode>(0755));
     if (auto result = Filesystem::PivotRoot("/mnt/ext2", "/mnt/ext2/tmp");
         !result)
         OnError("Aurora: Pivot root failed: %s", strerror(result.Error()));

@@ -42,6 +42,7 @@ ErrorOr<void> NeonMain(const Vector<StringView>& args,
     strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
 
     // 4. Connect to the socket
+    printf("call before connect, sockFd: %d\n", sock);
     if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) == -1)
     {
         perror("connect error (is the server running?)");
@@ -51,6 +52,7 @@ ErrorOr<void> NeonMain(const Vector<StringView>& args,
 
     // 5. Send the command
     auto command = args[1];
+    printf("call before send, sockFd: %d\n", sock);
     if (send(sock, command.Raw(), command.Size(), 0) == -1)
     {
         perror("send error");
